@@ -1,5 +1,5 @@
 import { Request } from "express";
-import rateLimit from "express-rate-limit";
+import rateLimit, { ipKeyGenerator } from "express-rate-limit";
 import { config } from "../config";
 
 /**
@@ -27,7 +27,10 @@ export const repaymentAttestRateLimit = rateLimit({
   legacyHeaders: false,
   keyGenerator: (req: Request) => {
     const apiKey = req.headers["x-api-key"];
-    return typeof apiKey === "string" && apiKey ? apiKey : req.ip || "unknown";
+    // An IPv6 fallback key must go through ipKeyGenerator, which normalizes
+    // to a /64 subnet -- otherwise a client can bypass the limit just by
+    // varying the trailing bits of its address.
+    return typeof apiKey === "string" && apiKey ? apiKey : ipKeyGenerator(req.ip || "unknown");
   },
   message: { error: "Too many attestation attempts. Try again shortly." },
 });
