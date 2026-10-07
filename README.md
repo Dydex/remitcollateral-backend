@@ -147,6 +147,29 @@ The contracts cannot cancel a loan whose disbursement fails after its collateral
 
 `npm run test:chain` exercises the chain client against a real deployment. Set the three contract IDs, `VERIFIER_SECRET_KEY`, `ORACLE_SECRET_KEY`, and `CHAIN_TEST_GUARANTOR_SECRET` and `CHAIN_TEST_PARTNER_SECRET` for funded testnet accounts.
 
+### Key rotation
+
+All three keys in the table above are single keys held directly by the backend process — there is no hardware-backed signing or automatic rotation yet. If one is suspected compromised, or just due for routine rotation, the procedure differs by key because of what each one actually controls.
+
+**Verifier.** The ledger authorizes verifiers individually, so the old one can be revoked without ever being invalid in between:
+
+1. Generate a new keypair and fund it on the network in use.
+2. Authorize it on `LoanLedger`, co-signed by the council: `SIGNERS="..." scripts/council-invoke.sh rc-council $LEDGER set_verifier --admin <council address> --verifier <new address> --authorized true` (run from `remitcollateral-contract`).
+3. Set `VERIFIER_SECRET_KEY` to the new key in the backend's environment and redeploy.
+4. Once the new key is confirmed working (a repayment attestation co-signs successfully), revoke the old one: the same `set_verifier` call with the old address and `--authorized false`.
+
+**Oracle.** There is exactly one active oracle address at a time — `set_oracle` replaces it outright, so steps 2 and 4 above collapse into one call:
+
+1. Generate a new keypair and fund it.
+2. `SIGNERS="..." scripts/council-invoke.sh rc-council $LEDGER set_oracle --admin <council address> --oracle <new address>`.
+3. Set `ORACLE_SECRET_KEY` to the new key and redeploy. The old oracle key stops having any effect the moment step 2 lands on chain, whether or not the backend has redeployed yet.
+
+**Beneficiary handle secret.** This one is different: it is never sent to the contracts at all, and nothing on chain needs to change. `chainHandle` is computed once, at `POST /beneficiaries` time, from the then-current `BENEFICIARY_HANDLE_SECRET`, and stored on the beneficiary record (`src/services/beneficiary.service.ts`) rather than recomputed per request. So:
+
+- Already-registered beneficiaries are unaffected — their stored `chainHandle` keeps matching what's on chain regardless of what the secret becomes afterward.
+- Only beneficiaries registered *after* rotation get a handle derived from the new secret.
+- There is no migration step, but there is a one-time cost: generate the new secret, set `BENEFICIARY_HANDLE_SECRET`, redeploy. Keep the old secret only as long as you might need to recompute a historical handle for debugging — it isn't needed for the running system to keep working.
+
 ### Running
 
 ```bash
