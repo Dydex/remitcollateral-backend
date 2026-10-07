@@ -58,6 +58,10 @@ PORT=4000
 STELLAR_NETWORK=testnet
 STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 
+# Browser origins allowed to call this API, comma-separated. Unset allows
+# any origin — fine for local development, not in production.
+CORS_ALLOWED_ORIGINS=
+
 # Soroban Contract Addresses
 GUARANTOR_VAULT_CONTRACT_ID=
 LOAN_LEDGER_CONTRACT_ID=

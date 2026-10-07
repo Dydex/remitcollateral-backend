@@ -26,6 +26,16 @@ export const config = {
   stellarNetwork: process.env.STELLAR_NETWORK || "testnet",
   stellarRpcUrl: process.env.STELLAR_RPC_URL || "https://soroban-testnet.stellar.org",
 
+  /**
+   * Origins allowed to make browser requests to this API. Empty means
+   * "allow any origin," which is only acceptable outside production: set
+   * this before deploying anywhere real traffic reaches the API.
+   */
+  corsAllowedOrigins: (process.env.CORS_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+
   // Soroban contracts
   contracts: {
     guarantorVault: process.env.GUARANTOR_VAULT_CONTRACT_ID || "",
