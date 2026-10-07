@@ -1,5 +1,8 @@
 import { Loan, Beneficiary } from "../types";
+import { logger } from "../logging/logger";
 import { logAuditEvent } from "./audit.service";
+
+const log = logger.child({ component: "notification" });
 
 /**
  * Notification Service
@@ -18,7 +21,7 @@ import { logAuditEvent } from "./audit.service";
 // ─── Transport ───────────────────────────────────────────────────────
 
 function sendSms(phoneNumber: string, body: string): void {
-  console.log(`[SMS → ${phoneNumber}]: ${body}`);
+  log.info({ phoneNumber, body }, "SMS sent");
 
   logAuditEvent({
     eventType: "SYSTEM",
@@ -29,7 +32,7 @@ function sendSms(phoneNumber: string, body: string): void {
 }
 
 function notifyGuarantor(guarantorId: string, body: string): void {
-  console.log(`[Notify guarantor ${guarantorId}]: ${body}`);
+  log.info({ guarantorId, body }, "guarantor notified");
 
   logAuditEvent({
     eventType: "SYSTEM",

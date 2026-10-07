@@ -1,5 +1,6 @@
 import dotenv from "dotenv";
 import { Networks } from "@stellar/stellar-sdk";
+import { logger } from "../logging/logger";
 
 dotenv.config();
 
@@ -15,7 +16,7 @@ function num(key: string, fallback: number): number {
 
   const parsed = Number(raw);
   if (!Number.isFinite(parsed)) {
-    console.warn(`[Config]: ${key}="${raw}" is not a number, using default ${fallback}`);
+    logger.warn({ key, value: raw, fallback }, "env var is not a number, using default");
     return fallback;
   }
   return parsed;

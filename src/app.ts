@@ -24,6 +24,8 @@ import { chainRouter } from "./routes/chain.routes";
 import { config } from "./config";
 import { chainFromConfig } from "./chain";
 import { setChain } from "./chain/runtime";
+import { requestLogging } from "./middleware/request-logging.middleware";
+import { logger } from "./logging/logger";
 
 // ─── Initialize ──────────────────────────────────────────────────────
 
@@ -99,13 +101,7 @@ app.use((_req, res, next) => {
   next();
 });
 
-// Request logging
-app.use((req, _res, next) => {
-  if (process.env.NODE_ENV !== "test") {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-  }
-  next();
-});
+app.use(requestLogging);
 
 // ─── Routes ──────────────────────────────────────────────────────────
 
@@ -139,11 +135,11 @@ app.use((_req, res) => {
 app.use(
   (
     err: Error,
-    _req: express.Request,
+    req: express.Request,
     res: express.Response,
     _next: express.NextFunction,
   ) => {
-    console.error(`[Error]: ${err.message}`);
+    (req.log ?? logger).error({ err }, "unhandled error");
     res.status(500).json({ error: "Internal server error" });
   },
 );

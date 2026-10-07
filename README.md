@@ -164,6 +164,14 @@ npm run build
 npm start
 ```
 
+### Logging
+
+Logs are structured JSON lines (via [pino](https://getpino.io)), one per
+request on completion — method, path, status, duration, and a `reqId`
+shared by every log line the request produces — plus one for each audit
+event, job tick, and unhandled error. Level defaults to `info` (`silent`
+during tests); override it with `LOG_LEVEL`.
+
 ---
 
 ## API Reference (v1)
