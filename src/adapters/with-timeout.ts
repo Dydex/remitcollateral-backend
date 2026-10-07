@@ -19,7 +19,6 @@ export function withDisbursementTimeout<T>(promise: Promise<T>, timeoutMs: numbe
       () => reject(new DisbursementTimeoutError(`Disbursement did not respond within ${timeoutMs}ms`)),
       timeoutMs,
     );
-    timer.unref?.();
 
     promise.then(
       (value) => { clearTimeout(timer); resolve(value); },
