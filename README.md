@@ -172,6 +172,15 @@ shared by every log line the request produces — plus one for each audit
 event, job tick, and unhandled error. Level defaults to `info` (`silent`
 during tests); override it with `LOG_LEVEL`.
 
+### Metrics
+
+`GET /metrics` exposes Prometheus-format metrics (via
+[prom-client](https://github.com/siimon/prom-client)): the lifecycle
+sweep's run count by outcome, contract gateway calls that failed or threw
+by method, and current loan counts by status — plus prom-client's default
+Node process metrics. Previously, a sweep failure or gateway error was
+visible only by reading the audit log.
+
 ---
 
 ## API Reference (v1)
@@ -185,6 +194,7 @@ Request and response bodies use snake_case, in the shapes the frontend declares 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | `GET` | `/health` | None | Service health, uptime, version |
+| `GET` | `/metrics` | None | Prometheus metrics: sweep runs, contract gateway errors, loan counts by status |
 | `GET` | `/api/v1/chain` | None | Whether the contracts are connected: `{ enabled, network_passphrase }` |
 
 ### Authentication
