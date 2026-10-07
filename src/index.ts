@@ -2,7 +2,8 @@ import app from "./app";
 import { config } from "./config";
 import { logger } from "./logging/logger";
 import { logAuditEvent } from "./services/audit.service";
-import { startLifecycleJob, stopLifecycleJob } from "./jobs/lifecycle.job";
+import { startLifecycleJob, stopLifecycleJob, waitForCurrentTick } from "./jobs/lifecycle.job";
+import { gracefulShutdown } from "./shutdown";
 
 // ─── Start Server ────────────────────────────────────────────────────
 
@@ -36,10 +37,30 @@ const server = app.listen(config.port, () => {
 
 // ─── Shutdown ────────────────────────────────────────────────────────
 
+let shuttingDown = false;
+
 function shutdown(signal: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+
   logger.info({ signal }, "shutting down");
+  // Stop scheduling new ticks immediately; a tick already in progress is
+  // waited for below rather than interrupted mid-sweep.
   stopLifecycleJob();
-  server.close(() => process.exit(0));
+
+  gracefulShutdown(
+    [
+      () => new Promise<void>((resolve) => server.close(() => resolve())),
+      waitForCurrentTick,
+    ],
+    config.shutdownTimeoutMs,
+  ).then(({ timedOut }) => {
+    logger.info(
+      { signal, timedOut },
+      timedOut ? "shutdown timed out waiting for in-flight work, forcing exit" : "shutdown complete",
+    );
+    process.exit(0);
+  });
 }
 
 process.on("SIGINT", () => shutdown("SIGINT"));
