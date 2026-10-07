@@ -41,7 +41,7 @@ export const config = {
     minLtvRatio: num("MIN_LTV_RATIO", 1.10),            // 110% floor LTV
     ltvReductionFactor: num("LTV_REDUCTION_FACTOR", 0.004), // score * factor = LTV reduction
     safetyBufferRatio: num("SAFETY_BUFFER_RATIO", 0.05),    // retained until 100% repaid
-    gracePeriodDays: num("GRACE_PERIOD_DAYS", 7),           // days before default
+    gracePeriodDays: num("GRACE_PERIOD_DAYS", 14),          // days before default; matches the testnet ledger's fixed grace period
     remittanceWeight: num("REMITTANCE_WEIGHT", 0.40),   // 40% weight, remittance history
     repaymentWeight: num("REPAYMENT_WEIGHT", 0.60),     // 60% weight, repayment history
     minRemittanceMonths: num("MIN_REMITTANCE_MONTHS", 6), // months needed to affect LTV
