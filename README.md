@@ -159,6 +159,9 @@ npm test
 # Chain client against a live testnet deployment (see On-chain roles)
 npm run test:chain
 
+# Load test: the lifecycle sweep against a large synthetic loan book
+npm run test:load
+
 # Production build & start
 npm run build
 npm start
@@ -313,6 +316,13 @@ records; it does not yet drive the LiquidationEngine's cranks (see
 > **Single-instance assumption.** The sweep runs in-process. Running more
 > than one instance would run it more than once per tick, so a multi-instance
 > deployment needs an external scheduler or a lock.
+
+> **Known scaling limit.** `npm run test:load` (`src/jobs/lifecycle.load-test.ts`)
+> swept 2,000 open loans in about 1.3 seconds, but the per-loan cost grows
+> with the size of the *entire* loan book, not just the sweep's own work —
+> see [#67](https://github.com/RemitCollateral/remitcollateral-backend/issues/67).
+> A loan book in the low thousands is enough for the scheduled sweep to stop
+> completing within its own interval.
 
 ---
 
