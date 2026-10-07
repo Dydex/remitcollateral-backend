@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import * as loanService from "./services/loan.service";
 import * as vaultService from "./services/vault.service";
 import * as liquidationService from "./services/liquidation.service";
@@ -60,7 +61,28 @@ setChain(chainClient);
 
 // ─── Middleware ───────────────────────────────────────────────────────
 
-app.use(cors());
+app.use(helmet());
+
+// CORS_ALLOWED_ORIGINS unset means "allow any origin" — fine for local
+// development, not for anything with real traffic reaching it. Requests
+// with no Origin header (server-to-server calls, partner webhooks, curl)
+// are not browser requests and are never subject to this check.
+if (process.env.NODE_ENV === "production" && config.corsAllowedOrigins.length === 0) {
+  console.warn(
+    "[Config]: CORS_ALLOWED_ORIGINS is unset in production — accepting browser requests from any origin.",
+  );
+}
+app.use(
+  cors(
+    config.corsAllowedOrigins.length > 0
+      ? {
+          origin: (origin, callback) => {
+            callback(null, !origin || config.corsAllowedOrigins.includes(origin));
+          },
+        }
+      : undefined,
+  ),
+);
 app.use(express.json());
 
 // Error bodies carry their reason as `message` as well as `error`: every route

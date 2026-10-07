@@ -27,6 +27,16 @@ export const config = {
   stellarNetwork: process.env.STELLAR_NETWORK || "testnet",
   stellarRpcUrl: process.env.STELLAR_RPC_URL || "https://soroban-testnet.stellar.org",
 
+  /**
+   * Origins allowed to make browser requests to this API. Empty means
+   * "allow any origin," which is only acceptable outside production: set
+   * this before deploying anywhere real traffic reaches the API.
+   */
+  corsAllowedOrigins: (process.env.CORS_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+
   // Soroban contracts
   contracts: {
     guarantorVault: process.env.GUARANTOR_VAULT_CONTRACT_ID || "",
@@ -42,7 +52,7 @@ export const config = {
     minLtvRatio: num("MIN_LTV_RATIO", 1.10),            // 110% floor LTV
     ltvReductionFactor: num("LTV_REDUCTION_FACTOR", 0.004), // score * factor = LTV reduction
     safetyBufferRatio: num("SAFETY_BUFFER_RATIO", 0.05),    // retained until 100% repaid
-    gracePeriodDays: num("GRACE_PERIOD_DAYS", 7),           // days before default
+    gracePeriodDays: num("GRACE_PERIOD_DAYS", 14),          // days before default; matches the testnet ledger's fixed grace period
     remittanceWeight: num("REMITTANCE_WEIGHT", 0.40),   // 40% weight, remittance history
     repaymentWeight: num("REPAYMENT_WEIGHT", 0.60),     // 60% weight, repayment history
     minRemittanceMonths: num("MIN_REMITTANCE_MONTHS", 6), // months needed to affect LTV
@@ -55,6 +65,16 @@ export const config = {
       process.env.LIFECYCLE_SWEEP_INTERVAL_MINUTES || "60",
       10,
     ),
+  },
+
+  // Rate limits. Both endpoints are plausible brute-force/abuse targets:
+  // auth challenges are unauthenticated, and attestations are the one
+  // partner-keyed endpoint that mutates loan state.
+  rateLimits: {
+    authChallengeWindowMinutes: num("AUTH_CHALLENGE_RATE_LIMIT_WINDOW_MINUTES", 5),
+    authChallengeMax: num("AUTH_CHALLENGE_RATE_LIMIT_MAX", 20),
+    repaymentAttestWindowMinutes: num("REPAYMENT_ATTEST_RATE_LIMIT_WINDOW_MINUTES", 1),
+    repaymentAttestMax: num("REPAYMENT_ATTEST_RATE_LIMIT_MAX", 60),
   },
 
   // Partner auth

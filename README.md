@@ -58,9 +58,9 @@ PORT=4000
 STELLAR_NETWORK=testnet
 STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 
-# Structured log level (trace|debug|info|warn|error|fatal|silent).
-# Defaults to "info", or "silent" when NODE_ENV=test.
-LOG_LEVEL=info
+# Browser origins allowed to call this API, comma-separated. Unset allows
+# any origin — fine for local development, not in production.
+CORS_ALLOWED_ORIGINS=
 
 # Soroban Contract Addresses
 GUARANTOR_VAULT_CONTRACT_ID=
@@ -88,6 +88,12 @@ PARTNER_STELLAR_ADDRESS=
 
 # Scheduled jobs
 LIFECYCLE_SWEEP_INTERVAL_MINUTES=60
+
+# Rate limits
+AUTH_CHALLENGE_RATE_LIMIT_WINDOW_MINUTES=5
+AUTH_CHALLENGE_RATE_LIMIT_MAX=20
+REPAYMENT_ATTEST_RATE_LIMIT_WINDOW_MINUTES=1
+REPAYMENT_ATTEST_RATE_LIMIT_MAX=60
 ```
 
 #### Protocol parameters
@@ -102,12 +108,12 @@ unset, so an empty `.env` runs the protocol exactly as specified.
 | `MIN_LTV_RATIO` | `1.10` | Floor — no reputation score goes below this |
 | `LTV_REDUCTION_FACTOR` | `0.004` | LTV reduction per point of reputation score |
 | `SAFETY_BUFFER_RATIO` | `0.05` | Collateral retained until repayment completes |
-| `GRACE_PERIOD_DAYS` | `7` | Days after a missed installment before default |
+| `GRACE_PERIOD_DAYS` | `14` | Days after a missed installment before default |
 | `REMITTANCE_WEIGHT` | `0.40` | Weight of remittance history in the score |
 | `REPAYMENT_WEIGHT` | `0.60` | Weight of repayment history in the score |
 | `MIN_REMITTANCE_MONTHS` | `6` | History needed before remittances influence LTV |
 
-With the contracts connected, the LoanLedger's own settings decide what happens on chain. Its grace period is fixed when it is deployed (14 days on the testnet deployment), so set `GRACE_PERIOD_DAYS` to match it.
+With the contracts connected, the LoanLedger's own settings decide what happens on chain. Its grace period is fixed when it is deployed (14 days on the testnet deployment), which is now the backend's default too. If a future deployment uses a different grace period, set `GRACE_PERIOD_DAYS` to match it.
 
 #### Exchange rates
 
@@ -197,6 +203,8 @@ Signing in:
 
 Each challenge works once and expires after five minutes. Endpoints marked **Admin** also require the session's wallet to be `ADMIN_WALLET_ADDRESS`; if that is unset, they refuse everyone.
 
+`GET /auth/challenge` is rate limited by IP (`AUTH_CHALLENGE_RATE_LIMIT_MAX` per `AUTH_CHALLENGE_RATE_LIMIT_WINDOW_MINUTES`, default 20 per 5 minutes), since it is unauthenticated by design.
+
 ### Guarantors
 
 | Method | Endpoint | Auth | Description |
@@ -248,6 +256,8 @@ A beneficiary is one person, however many guarantors support them. Adding a phon
 |--------|----------|------|-------------|
 | `POST` | `/api/v1/repayments/attest` | Partner API key | Submit signed repayment attestation |
 | `GET` | `/api/v1/loans/:id/repayments` | Wallet | Repayment history for a loan |
+
+`POST /repayments/attest` is rate limited by the presented `x-api-key` (`REPAYMENT_ATTEST_RATE_LIMIT_MAX` per `REPAYMENT_ATTEST_RATE_LIMIT_WINDOW_MINUTES`, default 60 per minute), falling back to IP for requests with no key at all.
 
 ### Remittance History
 

@@ -8,6 +8,7 @@ import {
 import { isStellarAddress } from "../auth/signature";
 import { ensureGuarantor } from "../services/guarantor.service";
 import { logAuditEvent } from "../services/audit.service";
+import { authChallengeRateLimit } from "../middleware/rate-limit.middleware";
 
 export const authRouter = Router();
 
@@ -18,7 +19,7 @@ export const authRouter = Router();
  * one-time nonce and an expiry, so a signature over it is useless anywhere
  * else and cannot be replayed.
  */
-authRouter.get("/challenge", (req: Request, res: Response) => {
+authRouter.get("/challenge", authChallengeRateLimit, (req: Request, res: Response) => {
   const wallet = String(req.query.wallet_address ?? req.query.wallet ?? "");
   if (!isStellarAddress(wallet)) {
     return res.status(400).json({ error: "wallet_address must be a Stellar account address (G...)" });
