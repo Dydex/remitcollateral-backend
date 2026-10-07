@@ -11,6 +11,7 @@ import {
   linkOf,
 } from "../services/beneficiary.service";
 import { serializeBeneficiary, serializeReputation } from "../api/serializers";
+import { paginate } from "../api/pagination";
 
 export const beneficiaryRouter = Router();
 
@@ -32,8 +33,10 @@ beneficiaryRouter.get("/", walletAuth, (req: Request, res: Response) => {
   if (!guarantorId) {
     return res.status(404).json({ error: "Guarantor not found. Register first." });
   }
+  const all = beneficiariesOf(guarantorId);
+  res.set("X-Total-Count", String(all.length));
   return res.json(
-    beneficiariesOf(guarantorId).map(({ beneficiary, link }) => serializeBeneficiary(beneficiary, link)),
+    paginate(all, req.query).map(({ beneficiary, link }) => serializeBeneficiary(beneficiary, link)),
   );
 });
 

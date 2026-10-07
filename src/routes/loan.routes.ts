@@ -4,6 +4,7 @@ import { beneficiaries, loans } from "../stores";
 import * as loanService from "../services/loan.service";
 import { serializeLoan, serializeSchedule } from "../api/serializers";
 import { loanView, loanViewsFor } from "../api/loan-views";
+import { paginate } from "../api/pagination";
 import { linkOf } from "../services/beneficiary.service";
 import { activeChain } from "../chain/runtime";
 import { ChainError } from "../chain/errors";
@@ -168,9 +169,11 @@ loanRouter.get("/", walletAuth, (req: Request, res: Response) => {
     return res.status(404).json({ error: "Guarantor not found. Register first." });
   }
 
-  const { status } = req.query;
+  const { status, limit, offset } = req.query;
   const views = loanViewsFor(guarantorId);
-  return res.json(status ? views.filter((view) => view.status === status) : views);
+  const filtered = status ? views.filter((view) => view.status === status) : views;
+  res.set("X-Total-Count", String(filtered.length));
+  return res.json(paginate(filtered, { limit, offset }));
 });
 
 /**
