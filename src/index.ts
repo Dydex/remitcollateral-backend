@@ -1,15 +1,21 @@
 import app from "./app";
 import { config } from "./config";
+import { logger } from "./logging/logger";
 import { logAuditEvent } from "./services/audit.service";
 import { startLifecycleJob, stopLifecycleJob } from "./jobs/lifecycle.job";
 
 // ─── Start Server ────────────────────────────────────────────────────
 
 const server = app.listen(config.port, () => {
-  console.log(`\n🔗 RemitCollateral Backend running on http://localhost:${config.port}`);
-  console.log(`📡 Network: ${config.stellarNetwork}`);
-  console.log(`❤️  Health: http://localhost:${config.port}/health`);
-  console.log(`📋 API: http://localhost:${config.port}/api/v1\n`);
+  logger.info(
+    {
+      port: config.port,
+      network: config.stellarNetwork,
+      healthUrl: `http://localhost:${config.port}/health`,
+      apiUrl: `http://localhost:${config.port}/api/v1`,
+    },
+    "RemitCollateral Backend started",
+  );
 
   logAuditEvent({
     eventType: "SYSTEM",
@@ -31,7 +37,7 @@ const server = app.listen(config.port, () => {
 // ─── Shutdown ────────────────────────────────────────────────────────
 
 function shutdown(signal: string): void {
-  console.log(`\n[Server]: ${signal} received, shutting down`);
+  logger.info({ signal }, "shutting down");
   stopLifecycleJob();
   server.close(() => process.exit(0));
 }

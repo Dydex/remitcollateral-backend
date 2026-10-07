@@ -58,6 +58,10 @@ PORT=4000
 STELLAR_NETWORK=testnet
 STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 
+# Structured log level (trace|debug|info|warn|error|fatal|silent).
+# Defaults to "info", or "silent" when NODE_ENV=test.
+LOG_LEVEL=info
+
 # Soroban Contract Addresses
 GUARANTOR_VAULT_CONTRACT_ID=
 LOAN_LEDGER_CONTRACT_ID=
@@ -153,6 +157,14 @@ npm run test:chain
 npm run build
 npm start
 ```
+
+### Logging
+
+Logs are structured JSON lines (via [pino](https://getpino.io)), one per
+request on completion — method, path, status, duration, and a `reqId`
+shared by every log line the request produces — plus one for each audit
+event, job tick, and unhandled error. Level defaults to `info` (`silent`
+during tests); override it with `LOG_LEVEL`.
 
 ---
 

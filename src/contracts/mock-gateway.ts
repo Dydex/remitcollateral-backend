@@ -1,6 +1,9 @@
 import crypto from "crypto";
 import { ContractGateway } from "./gateway.interface";
 import { ContractCallResult, CollateralPosition } from "../types";
+import { logger } from "../logging/logger";
+
+const log = logger.child({ component: "mock-contract-gateway" });
 
 /**
  * Mock Contract Gateway (§10)
@@ -204,9 +207,7 @@ export class MockContractGateway implements ContractGateway {
       ledgerAt: new Date().toISOString(),
     };
 
-    console.log(
-      `[MockContract]: ${contract}.${method} → ${result.txHash} ${JSON.stringify(details || {})}`,
-    );
+    log.info({ contract, method, txHash: result.txHash, details }, "mock contract call");
 
     return result;
   }
@@ -216,7 +217,7 @@ export class MockContractGateway implements ContractGateway {
     method: string,
     failureReason: string,
   ): ContractCallResult {
-    console.log(`[MockContract]: ${contract}.${method} FAILED — ${failureReason}`);
+    log.warn({ contract, method, failureReason }, "mock contract call failed");
 
     return {
       success: false,

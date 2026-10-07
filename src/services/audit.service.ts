@@ -1,5 +1,8 @@
 import { AuditEvent, AuditEventType } from "../types";
 import { auditEvents, generateId } from "../stores";
+import { logger } from "../logging/logger";
+
+const log = logger.child({ component: "audit" });
 
 // ─── Input ───────────────────────────────────────────────────────────
 
@@ -28,11 +31,17 @@ export function logAuditEvent(input: LogAuditInput): AuditEvent {
 
   auditEvents.push(event);
 
-  const detailStr = typeof event.details === "string"
-    ? event.details
-    : JSON.stringify(event.details);
-
-  console.log(`[Audit]: [${event.eventType}] ${event.action} — ${detailStr}`);
+  log.info(
+    {
+      eventType: event.eventType,
+      action: event.action,
+      actor: event.actor,
+      entityType: event.entityType,
+      entityId: event.entityId,
+      details: event.details,
+    },
+    "audit event recorded",
+  );
   return event;
 }
 

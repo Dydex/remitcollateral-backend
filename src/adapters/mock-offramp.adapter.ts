@@ -6,6 +6,9 @@ import {
   OffRampAttestation,
   OffRampRemittanceRecord,
 } from "../types";
+import { logger } from "../logging/logger";
+
+const log = logger.child({ component: "mock-offramp" });
 
 /** Indicative rates, local units per 1 USD. The same figures the frontend's mock uses. */
 export const INDICATIVE_RATES: Record<string, number> = {
@@ -41,9 +44,14 @@ export class MockOffRampAdapter implements OffRampAdapter {
 
     this.knownReferences.set(result.partner_reference, result);
 
-    console.log(
-      `[MockOffRamp]: Disbursed ${request.amount_local} ${request.local_currency} ` +
-      `to ${request.beneficiary_phone} (ref: ${result.partner_reference})`,
+    log.info(
+      {
+        amountLocal: request.amount_local,
+        localCurrency: request.local_currency,
+        beneficiaryPhone: request.beneficiary_phone,
+        partnerReference: result.partner_reference,
+      },
+      "disbursed",
     );
 
     return result;
@@ -53,9 +61,9 @@ export class MockOffRampAdapter implements OffRampAdapter {
     // Accept any attestation where partner_signature is non-empty
     const valid = !!attestation.partner_signature && attestation.partner_signature.length > 0;
 
-    console.log(
-      `[MockOffRamp]: Attestation verification for loan ${attestation.loan_id}, ` +
-      `installment ${attestation.installment_number}: ${valid ? "VALID" : "INVALID"}`,
+    log.info(
+      { loanId: attestation.loan_id, installmentNumber: attestation.installment_number, valid },
+      "attestation verification",
     );
 
     return valid;
