@@ -6,6 +6,8 @@ import {
   OffRampAttestation,
   ExchangeRate,
   ChainLoanDraft,
+  DisbursementResult,
+  DisbursementStatus,
 } from "../types";
 import type { ChainLoan } from "../chain/soroban";
 import {
@@ -17,6 +19,7 @@ import {
   generateId,
 } from "../stores";
 import { OffRampAdapter } from "../adapters/offramp.interface";
+import { withDisbursementTimeout, DisbursementTimeoutError } from "../adapters/with-timeout";
 import { ContractGateway } from "../contracts/gateway.interface";
 import { logAuditEvent } from "./audit.service";
 import * as vaultService from "./vault.service";
@@ -156,20 +159,49 @@ export async function originateLoan(
   // Disburse via off-ramp adapter
   if (offRampAdapter) {
     try {
-      await offRampAdapter.disburse({
-        loan_id: loan.id,
-        beneficiary_phone: beneficiary.phoneNumber,
-        beneficiary_kyc_ref: beneficiary.localKycRef,
-        amount_local: dto.principalLocal,
-        local_currency: dto.localCurrency,
-        idempotency_key: loan.id,
-      });
+      await withDisbursementTimeout(
+        offRampAdapter.disburse({
+          loan_id: loan.id,
+          beneficiary_phone: beneficiary.phoneNumber,
+          beneficiary_kyc_ref: beneficiary.localKycRef,
+          amount_local: dto.principalLocal,
+          local_currency: dto.localCurrency,
+          idempotency_key: loan.id,
+        }),
+        config.disbursementTimeoutMs,
+      );
+      loan.disbursementStatus = "completed";
+      loan.updatedAt = new Date().toISOString();
+      loans.set(loan.id, loan);
       // §3.2 step 5 — the beneficiary has no wallet and no dashboard, so
       // the SMS is the only way they learn the schedule they must repay on.
       notifications.notifyLoanDisbursed(loan, beneficiary);
     } catch (err) {
-      // Rollback: unwind the on-chain lock as well as the local one, or the
-      // guarantor's collateral stays locked against a loan that never existed.
+      // A timeout means the partner's own answer never arrived -- they may
+      // already have paid the beneficiary. Rolling back here regardless
+      // would be the thing #32 exists to prevent: the loan and its locked
+      // collateral are left exactly as they are, flagged for an operator
+      // to resolve once the partner's actual status is known, rather than
+      // guessed at.
+      if (err instanceof DisbursementTimeoutError) {
+        loan.disbursementStatus = "unknown";
+        loan.updatedAt = new Date().toISOString();
+        loans.set(loan.id, loan);
+        logAuditEvent({
+          eventType: "LOAN",
+          action: "LOAN_DISBURSEMENT_UNKNOWN",
+          actor: guarantorId,
+          entityType: "loan",
+          entityId: loan.id,
+          details: { message: err.message },
+        });
+        throw new Error(`Disbursement outcome unknown: ${err.message}`);
+      }
+
+      // A clean rejection, by contrast, is certain: nothing was disbursed,
+      // so unwinding the on-chain lock as well as the local one is safe --
+      // otherwise the guarantor's collateral stays locked against a loan
+      // that never existed.
       if (contractGateway) {
         await contractGateway.releaseCollateral(vaultId, loan.id, requiredCollateral);
         await contractGateway.closeLoan(loan.id, "defaulted");
@@ -304,19 +336,33 @@ export async function recordChainLoan(
 
   if (offRampAdapter) {
     try {
-      await offRampAdapter.disburse({
-        loan_id: loan.id,
-        beneficiary_phone: beneficiary.phoneNumber,
-        beneficiary_kyc_ref: beneficiary.localKycRef,
-        amount_local: draft.principalLocal,
-        local_currency: draft.localCurrency,
-        idempotency_key: loan.id,
-      });
+      await withDisbursementTimeout(
+        offRampAdapter.disburse({
+          loan_id: loan.id,
+          beneficiary_phone: beneficiary.phoneNumber,
+          beneficiary_kyc_ref: beneficiary.localKycRef,
+          amount_local: draft.principalLocal,
+          local_currency: draft.localCurrency,
+          idempotency_key: loan.id,
+        }),
+        config.disbursementTimeoutMs,
+      );
+      loan.disbursementStatus = "completed";
+      loan.updatedAt = new Date().toISOString();
+      loans.set(loan.id, loan);
       notifications.notifyLoanDisbursed(loan, beneficiary);
     } catch (err) {
+      loan.disbursementStatus = err instanceof DisbursementTimeoutError ? "unknown" : "failed";
+      loan.updatedAt = new Date().toISOString();
+      loans.set(loan.id, loan);
+      // Distinct from a clean rejection: the partner's own answer never
+      // arrived, so whether the beneficiary was actually paid is unknown,
+      // not "no". Either way nothing can be unwound here -- the collateral
+      // is already locked on chain -- but an operator resolving this needs
+      // to know which case they're looking at.
       logAuditEvent({
         eventType: "LOAN",
-        action: "LOAN_DISBURSEMENT_FAILED",
+        action: err instanceof DisbursementTimeoutError ? "LOAN_DISBURSEMENT_UNKNOWN" : "LOAN_DISBURSEMENT_FAILED",
         actor: guarantorId,
         entityType: "loan",
         entityId: loan.id,
@@ -519,3 +565,116 @@ export function outstandingPrincipal(loan: Loan): number {
     .reduce((sum, s) => sum + s.amountUsd, 0);
   return Math.max(0, Math.round((loan.principalUsd - repaid) * 100) / 100);
 }
+
+// ─── Disbursement Reconciliation ────────────────────────────────────
+
+export interface ReconcileDisbursementOptions {
+  success?: boolean;
+  partnerReference?: string;
+  failureReason?: string;
+}
+
+export interface ReconcileDisbursementResult {
+  success: boolean;
+  outcome: "disbursed" | "unwound";
+  loan?: Loan;
+  partnerReference?: string;
+  failureReason?: string;
+}
+
+/**
+ * Reconcile a loan whose disbursement timed out or left the outcome unknown.
+ *
+ * Checks against the off-ramp partner (via getDisbursementStatus) or applies
+ * an operator-provided resolution:
+ * - If the partner disbursed: confirms the loan as completed, sends notification,
+ *   and keeps collateral locked.
+ * - If the partner rejected / failed: unwinds the locked collateral back to the
+ *   vault (and on chain if gateway connected) and cleans up the loan.
+ */
+export async function reconcileDisbursement(
+  loanId: string,
+  resolution?: ReconcileDisbursementOptions,
+  actor = "system",
+): Promise<ReconcileDisbursementResult> {
+  const loan = loans.get(loanId);
+  if (!loan) {
+    throw new Error(`Loan ${loanId} not found`);
+  }
+
+  let result: DisbursementResult;
+  if (resolution !== undefined && typeof resolution.success === "boolean") {
+    result = {
+      success: resolution.success,
+      partner_reference: resolution.partnerReference ?? `MANUAL-${Date.now()}`,
+      disbursed_at: new Date().toISOString(),
+      failure_reason: resolution.failureReason,
+    };
+  } else {
+    if (!offRampAdapter) {
+      throw new Error("No off-ramp adapter configured for reconciliation");
+    }
+    result = await offRampAdapter.getDisbursementStatus(loan.id);
+  }
+
+  if (result.success) {
+    loan.disbursementStatus = "completed";
+    loan.updatedAt = new Date().toISOString();
+    loans.set(loan.id, loan);
+
+    const beneficiary = beneficiaries.get(loan.beneficiaryId);
+    if (beneficiary) {
+      notifications.notifyLoanDisbursed(loan, beneficiary);
+    }
+
+    logAuditEvent({
+      eventType: "LOAN",
+      action: "LOAN_DISBURSEMENT_RECONCILED",
+      actor,
+      entityType: "loan",
+      entityId: loan.id,
+      details: {
+        outcome: "disbursed",
+        partnerReference: result.partner_reference,
+      },
+    });
+
+    return {
+      success: true,
+      outcome: "disbursed",
+      loan,
+      partnerReference: result.partner_reference,
+    };
+  } else {
+    if (contractGateway) {
+      await contractGateway.releaseCollateral(loan.vaultId, loan.id, loan.collateralLockedUsd);
+      await contractGateway.closeLoan(loan.id, "defaulted");
+    }
+    vaultService.releaseCollateral(loan.vaultId, loan.collateralLockedUsd);
+    loans.delete(loan.id);
+
+    logAuditEvent({
+      eventType: "LOAN",
+      action: "LOAN_DISBURSEMENT_RECONCILED",
+      actor,
+      entityType: "loan",
+      entityId: loan.id,
+      details: {
+        outcome: "unwound",
+        failureReason: result.failure_reason ?? "Partner confirmed non-disbursement",
+      },
+    });
+
+    return {
+      success: true,
+      outcome: "unwound",
+      failureReason: result.failure_reason,
+    };
+  }
+}
+
+/** Lists all loans whose disbursement outcome is currently unknown. */
+export function loansWithUnknownDisbursement(): Loan[] {
+  return Array.from(loans.values()).filter((l) => l.disbursementStatus === "unknown");
+}
+
