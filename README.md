@@ -58,6 +58,10 @@ PORT=4000
 STELLAR_NETWORK=testnet
 STELLAR_RPC_URL=https://soroban-testnet.stellar.org
 
+# Browser origins allowed to call this API, comma-separated. Unset allows
+# any origin — fine for local development, not in production.
+CORS_ALLOWED_ORIGINS=
+
 # Soroban Contract Addresses
 GUARANTOR_VAULT_CONTRACT_ID=
 LOAN_LEDGER_CONTRACT_ID=
@@ -104,12 +108,12 @@ unset, so an empty `.env` runs the protocol exactly as specified.
 | `MIN_LTV_RATIO` | `1.10` | Floor — no reputation score goes below this |
 | `LTV_REDUCTION_FACTOR` | `0.004` | LTV reduction per point of reputation score |
 | `SAFETY_BUFFER_RATIO` | `0.05` | Collateral retained until repayment completes |
-| `GRACE_PERIOD_DAYS` | `7` | Days after a missed installment before default |
+| `GRACE_PERIOD_DAYS` | `14` | Days after a missed installment before default |
 | `REMITTANCE_WEIGHT` | `0.40` | Weight of remittance history in the score |
 | `REPAYMENT_WEIGHT` | `0.60` | Weight of repayment history in the score |
 | `MIN_REMITTANCE_MONTHS` | `6` | History needed before remittances influence LTV |
 
-With the contracts connected, the LoanLedger's own settings decide what happens on chain. Its grace period is fixed when it is deployed (14 days on the testnet deployment), so set `GRACE_PERIOD_DAYS` to match it.
+With the contracts connected, the LoanLedger's own settings decide what happens on chain. Its grace period is fixed when it is deployed (14 days on the testnet deployment), which is now the backend's default too. If a future deployment uses a different grace period, set `GRACE_PERIOD_DAYS` to match it.
 
 #### Exchange rates
 
