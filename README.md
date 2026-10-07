@@ -162,6 +162,10 @@ npm run test:chain
 # Production build & start
 npm run build
 npm start
+
+# Docker
+docker build -t remitcollateral-backend .
+docker run --rm -p 4000:4000 --env-file .env remitcollateral-backend
 ```
 
 ### Logging
