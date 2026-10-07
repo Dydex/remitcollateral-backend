@@ -11,6 +11,7 @@ import {
 import { logAuditEvent } from "../services/audit.service";
 import { refreshReputationScore } from "../services/reputation.service";
 import { serializeRemittance } from "../api/serializers";
+import { paginate } from "../api/pagination";
 import { linkOf } from "../services/beneficiary.service";
 
 export const remittanceRouter = Router();
@@ -87,7 +88,7 @@ remittanceRouter.get("/", walletAuth, (req: Request, res: Response) => {
     return res.status(404).json({ error: "Guarantor not found. Register first." });
   }
 
-  const beneficiaryId = req.query.beneficiary_id;
+  const { beneficiary_id: beneficiaryId, limit, offset } = req.query;
   let records = remittanceRecords.filter((r) => r.guarantorId === guarantorId);
 
   if (beneficiaryId) {
@@ -98,7 +99,8 @@ remittanceRouter.get("/", walletAuth, (req: Request, res: Response) => {
     (a, b) => new Date(b.sentAt).getTime() - new Date(a.sentAt).getTime(),
   );
 
-  return res.json(records.map(serializeRemittance));
+  res.set("X-Total-Count", String(records.length));
+  return res.json(paginate(records, { limit, offset }).map(serializeRemittance));
 });
 
 /**
