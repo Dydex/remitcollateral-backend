@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { walletAuth, partnerAuth } from "../middleware/auth.middleware";
+import { repaymentAttestRateLimit } from "../middleware/rate-limit.middleware";
 import { loans, repaymentAttestations } from "../stores";
 import * as loanService from "../services/loan.service";
 import { serializeAttestation } from "../api/serializers";
@@ -9,7 +10,7 @@ export const repaymentRouter = Router();
 /**
  * POST /repayments/attest — Submit a signed repayment attestation (partner auth).
  */
-repaymentRouter.post("/attest", partnerAuth, async (req: Request, res: Response) => {
+repaymentRouter.post("/attest", repaymentAttestRateLimit, partnerAuth, async (req: Request, res: Response) => {
   const {
     loanId, installmentNumber, amountLocal, amountUsd,
     beneficiaryPhone, partnerSignature, attestedAt,

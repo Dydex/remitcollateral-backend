@@ -66,6 +66,16 @@ export const config = {
     ),
   },
 
+  // Rate limits. Both endpoints are plausible brute-force/abuse targets:
+  // auth challenges are unauthenticated, and attestations are the one
+  // partner-keyed endpoint that mutates loan state.
+  rateLimits: {
+    authChallengeWindowMinutes: num("AUTH_CHALLENGE_RATE_LIMIT_WINDOW_MINUTES", 5),
+    authChallengeMax: num("AUTH_CHALLENGE_RATE_LIMIT_MAX", 20),
+    repaymentAttestWindowMinutes: num("REPAYMENT_ATTEST_RATE_LIMIT_WINDOW_MINUTES", 1),
+    repaymentAttestMax: num("REPAYMENT_ATTEST_RATE_LIMIT_MAX", 60),
+  },
+
   // Partner auth
   // No default: without a configured key, partner endpoints refuse everyone.
   partnerApiKey: process.env.PARTNER_API_KEY || "",

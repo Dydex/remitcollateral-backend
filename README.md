@@ -88,6 +88,12 @@ PARTNER_STELLAR_ADDRESS=
 
 # Scheduled jobs
 LIFECYCLE_SWEEP_INTERVAL_MINUTES=60
+
+# Rate limits
+AUTH_CHALLENGE_RATE_LIMIT_WINDOW_MINUTES=5
+AUTH_CHALLENGE_RATE_LIMIT_MAX=20
+REPAYMENT_ATTEST_RATE_LIMIT_WINDOW_MINUTES=1
+REPAYMENT_ATTEST_RATE_LIMIT_MAX=60
 ```
 
 #### Protocol parameters
@@ -189,6 +195,8 @@ Signing in:
 
 Each challenge works once and expires after five minutes. Endpoints marked **Admin** also require the session's wallet to be `ADMIN_WALLET_ADDRESS`; if that is unset, they refuse everyone.
 
+`GET /auth/challenge` is rate limited by IP (`AUTH_CHALLENGE_RATE_LIMIT_MAX` per `AUTH_CHALLENGE_RATE_LIMIT_WINDOW_MINUTES`, default 20 per 5 minutes), since it is unauthenticated by design.
+
 ### Guarantors
 
 | Method | Endpoint | Auth | Description |
@@ -240,6 +248,8 @@ A beneficiary is one person, however many guarantors support them. Adding a phon
 |--------|----------|------|-------------|
 | `POST` | `/api/v1/repayments/attest` | Partner API key | Submit signed repayment attestation |
 | `GET` | `/api/v1/loans/:id/repayments` | Wallet | Repayment history for a loan |
+
+`POST /repayments/attest` is rate limited by the presented `x-api-key` (`REPAYMENT_ATTEST_RATE_LIMIT_MAX` per `REPAYMENT_ATTEST_RATE_LIMIT_WINDOW_MINUTES`, default 60 per minute), falling back to IP for requests with no key at all.
 
 ### Remittance History
 
