@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { z } from "zod";
 import { walletAuth } from "../middleware/auth.middleware";
 import { beneficiaries } from "../stores";
 import { logAuditEvent } from "../services/audit.service";
@@ -12,10 +13,20 @@ import {
 } from "../services/beneficiary.service";
 import { serializeBeneficiary, serializeReputation } from "../api/serializers";
 import { paginate } from "../api/pagination";
+import { validateBody } from "../api/validate";
 
 export const beneficiaryRouter = Router();
 
-const text = (value: unknown) => (typeof value === "string" ? value.trim() : "");
+const createBeneficiarySchema = z.object({
+  phone_number: z.string().trim().min(1),
+  local_kyc_ref: z.string().trim().min(1),
+  local_currency: z
+    .string()
+    .trim()
+    .transform((v) => v.toUpperCase())
+    .pipe(z.string().regex(/^[A-Z]{3}$/, "must be an ISO 4217 code, e.g. NGN")),
+  display_name: z.string().trim().min(1).optional(),
+});
 
 /** The beneficiary, only if the guarantor supports them. Otherwise not found. */
 function ownBeneficiary(req: Request) {
@@ -47,27 +58,14 @@ beneficiaryRouter.get("/", walletAuth, (req: Request, res: Response) => {
  * Someone another guarantor already supports is linked, not duplicated, when
  * the phone number and partner KYC reference both match.
  */
-beneficiaryRouter.post("/", walletAuth, async (req: Request, res: Response) => {
+beneficiaryRouter.post("/", walletAuth, validateBody(createBeneficiarySchema), async (req: Request, res: Response) => {
   const walletAddress = (req as any).walletAddress as string;
   const guarantorId = (req as any).guarantorId as string | undefined;
   if (!guarantorId) {
     return res.status(404).json({ error: "Guarantor not found. Register first." });
   }
 
-  const phoneNumber = text(req.body?.phone_number);
-  const localKycRef = text(req.body?.local_kyc_ref);
-  const localCurrency = text(req.body?.local_currency).toUpperCase();
-  const displayName = text(req.body?.display_name) || undefined;
-
-  if (!phoneNumber || !localKycRef) {
-    return res.status(400).json({
-      error:
-        "phone_number and local_kyc_ref are required. The KYC reference comes from your off-ramp partner.",
-    });
-  }
-  if (!/^[A-Z]{3}$/.test(localCurrency)) {
-    return res.status(400).json({ error: "local_currency must be an ISO 4217 code, e.g. NGN" });
-  }
+  const { phone_number: phoneNumber, local_kyc_ref: localKycRef, local_currency: localCurrency, display_name: displayName } = req.body;
 
   let added;
   try {
