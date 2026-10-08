@@ -207,6 +207,8 @@ All endpoints are prefixed with `/api/v1` (except `/health`).
 
 Request and response bodies use snake_case, in the shapes the frontend declares in its `lib/types.ts`: resources are returned directly and lists as JSON arrays, not wrapped in an envelope. Error responses carry the reason as both `error` and `message`.
 
+A machine-readable OpenAPI 3 document covering everything below is served at `GET /api/v1/openapi.json` (`src/openapi.ts`). It's hand-written rather than generated from the route definitions, but `src/openapi.test.ts` enumerates the actually-mounted routes and fails if the document claims a path or method that doesn't really exist.
+
 ### Health & Platform
 
 | Method | Endpoint | Auth | Description |
