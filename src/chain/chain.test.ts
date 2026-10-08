@@ -61,9 +61,9 @@ function buildTx(source: Keypair, memoValue: string) {
   return new TransactionBuilder(new Account(source.publicKey(), "1"), {
     fee: "100",
     networkPassphrase: Networks.TESTNET,
+    timebounds: { minTime: 0, maxTime: 4_000_000_000 },
   })
     .addOperation(Operation.manageData({ name: "k", value: memoValue }))
-    .setTimeout(300)
     .build();
 }
 
