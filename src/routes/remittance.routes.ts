@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { z } from "zod";
 import { walletAuth, partnerAuth } from "../middleware/auth.middleware";
 import { RemittanceRecord, RemittanceSource } from "../types";
 import {
@@ -12,30 +13,29 @@ import { logAuditEvent } from "../services/audit.service";
 import { refreshReputationScore } from "../services/reputation.service";
 import { serializeRemittance } from "../api/serializers";
 import { paginate } from "../api/pagination";
+import { validateBody } from "../api/validate";
 import { linkOf } from "../services/beneficiary.service";
 
 export const remittanceRouter = Router();
 
+const createRemittanceSchema = z.object({
+  beneficiary_id: z.string().min(1),
+  amount_usd: z.number().finite().positive(),
+  local_amount: z.number().finite().positive(),
+  local_currency: z.string().trim().min(1),
+  sent_at: z.string().refine((v) => !Number.isNaN(new Date(v).getTime()), "must be a valid date"),
+});
+
 /**
  * POST /remittances — Record a remittance (self-declared or partner-reported).
  */
-remittanceRouter.post("/", walletAuth, (req: Request, res: Response) => {
+remittanceRouter.post("/", walletAuth, validateBody(createRemittanceSchema), (req: Request, res: Response) => {
   const guarantorId = (req as any).guarantorId as string;
   if (!guarantorId) {
     return res.status(404).json({ error: "Guarantor not found. Register first." });
   }
 
-  const beneficiaryId = req.body?.beneficiary_id;
-  const amountUsd = req.body?.amount_usd;
-  const localAmount = req.body?.local_amount;
-  const localCurrency = req.body?.local_currency;
-  const sentAt = req.body?.sent_at;
-
-  if (!beneficiaryId || !amountUsd || !localAmount || !localCurrency || !sentAt) {
-    return res.status(400).json({
-      error: "Missing required fields: beneficiary_id, amount_usd, local_amount, local_currency, sent_at",
-    });
-  }
+  const { beneficiary_id: beneficiaryId, amount_usd: amountUsd, local_amount: localAmount, local_currency: localCurrency, sent_at: sentAt } = req.body;
 
   // §9.2 — the protocol does not trust guarantor claims. Anything recorded
   // on a wallet-authenticated request is self-declared by definition; only

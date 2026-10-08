@@ -147,6 +147,29 @@ The contracts cannot cancel a loan whose disbursement fails after its collateral
 
 `npm run test:chain` exercises the chain client against a real deployment. Set the three contract IDs, `VERIFIER_SECRET_KEY`, `ORACLE_SECRET_KEY`, and `CHAIN_TEST_GUARANTOR_SECRET` and `CHAIN_TEST_PARTNER_SECRET` for funded testnet accounts.
 
+### Key rotation
+
+All three keys in the table above are single keys held directly by the backend process — there is no hardware-backed signing or automatic rotation yet. If one is suspected compromised, or just due for routine rotation, the procedure differs by key because of what each one actually controls.
+
+**Verifier.** The ledger authorizes verifiers individually, so the old one can be revoked without ever being invalid in between:
+
+1. Generate a new keypair and fund it on the network in use.
+2. Authorize it on `LoanLedger`, co-signed by the council: `SIGNERS="..." scripts/council-invoke.sh rc-council $LEDGER set_verifier --admin <council address> --verifier <new address> --authorized true` (run from `remitcollateral-contract`).
+3. Set `VERIFIER_SECRET_KEY` to the new key in the backend's environment and redeploy.
+4. Once the new key is confirmed working (a repayment attestation co-signs successfully), revoke the old one: the same `set_verifier` call with the old address and `--authorized false`.
+
+**Oracle.** There is exactly one active oracle address at a time — `set_oracle` replaces it outright, so steps 2 and 4 above collapse into one call:
+
+1. Generate a new keypair and fund it.
+2. `SIGNERS="..." scripts/council-invoke.sh rc-council $LEDGER set_oracle --admin <council address> --oracle <new address>`.
+3. Set `ORACLE_SECRET_KEY` to the new key and redeploy. The old oracle key stops having any effect the moment step 2 lands on chain, whether or not the backend has redeployed yet.
+
+**Beneficiary handle secret.** This one is different: it is never sent to the contracts at all, and nothing on chain needs to change. `chainHandle` is computed once, at `POST /beneficiaries` time, from the then-current `BENEFICIARY_HANDLE_SECRET`, and stored on the beneficiary record (`src/services/beneficiary.service.ts`) rather than recomputed per request. So:
+
+- Already-registered beneficiaries are unaffected — their stored `chainHandle` keeps matching what's on chain regardless of what the secret becomes afterward.
+- Only beneficiaries registered *after* rotation get a handle derived from the new secret.
+- There is no migration step, but there is a one-time cost: generate the new secret, set `BENEFICIARY_HANDLE_SECRET`, redeploy. Keep the old secret only as long as you might need to recompute a historical handle for debugging — it isn't needed for the running system to keep working.
+
 ### Running
 
 ```bash
@@ -162,6 +185,10 @@ npm run test:chain
 # Production build & start
 npm run build
 npm start
+
+# Docker
+docker build -t remitcollateral-backend .
+docker run --rm -p 4000:4000 --env-file .env remitcollateral-backend
 ```
 
 ### Logging
@@ -188,6 +215,8 @@ visible only by reading the audit log.
 All endpoints are prefixed with `/api/v1` (except `/health`).
 
 Request and response bodies use snake_case, in the shapes the frontend declares in its `lib/types.ts`: resources are returned directly and lists as JSON arrays, not wrapped in an envelope. Error responses carry the reason as both `error` and `message`.
+
+A machine-readable OpenAPI 3 document covering everything below is served at `GET /api/v1/openapi.json` (`src/openapi.ts`). It's hand-written rather than generated from the route definitions, but `src/openapi.test.ts` enumerates the actually-mounted routes and fails if the document claims a path or method that doesn't really exist.
 
 ### Health & Platform
 
@@ -269,6 +298,8 @@ A beneficiary is one person, however many guarantors support them. Adding a phon
 
 `POST /repayments/attest` is rate limited by the presented `x-api-key` (`REPAYMENT_ATTEST_RATE_LIMIT_MAX` per `REPAYMENT_ATTEST_RATE_LIMIT_WINDOW_MINUTES`, default 60 per minute), falling back to IP for requests with no key at all.
 
+It is also idempotent per `(loanId, installmentNumber)`: a partner retrying an attestation it never saw a response for — rather than a genuinely new installment — gets the same loan back with `collateralReleased: 0`, without a second attestation record or a second contract-gateway call.
+
 ### Remittance History
 
 | Method | Endpoint | Auth | Description |
@@ -323,6 +354,11 @@ records; it does not yet drive the LiquidationEngine's cranks (see
 > **Single-instance assumption.** The sweep runs in-process. Running more
 > than one instance would run it more than once per tick, so a multi-instance
 > deployment needs an external scheduler or a lock.
+
+On `SIGINT`/`SIGTERM`, the process stops accepting new connections and waits
+for in-flight requests and any sweep tick already in progress to finish,
+rather than exiting mid-sweep — up to `SHUTDOWN_TIMEOUT_MS` (default 10s),
+after which it forces exit anyway rather than hanging.
 
 ---
 

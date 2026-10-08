@@ -67,6 +67,14 @@ export const config = {
     ),
   },
 
+  // How long shutdown waits for in-flight requests and a running sweep
+  // tick to finish before forcing exit anyway.
+  shutdownTimeoutMs: num("SHUTDOWN_TIMEOUT_MS", 10_000),
+
+  // How long a disbursement call may run before it's treated as an
+  // unknown outcome rather than awaited indefinitely.
+  disbursementTimeoutMs: num("DISBURSEMENT_TIMEOUT_MS", 15_000),
+
   // Rate limits. Both endpoints are plausible brute-force/abuse targets:
   // auth challenges are unauthenticated, and attestations are the one
   // partner-keyed endpoint that mutates loan state.

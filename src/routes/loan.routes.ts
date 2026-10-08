@@ -1,10 +1,12 @@
 import { Router, Request, Response } from "express";
+import { z } from "zod";
 import { walletAuth } from "../middleware/auth.middleware";
 import { beneficiaries, loans } from "../stores";
 import * as loanService from "../services/loan.service";
 import { serializeLoan, serializeSchedule } from "../api/serializers";
 import { loanView, loanViewsFor } from "../api/loan-views";
 import { paginate } from "../api/pagination";
+import { validateBody } from "../api/validate";
 import { linkOf } from "../services/beneficiary.service";
 import { activeChain } from "../chain/runtime";
 import { ChainError } from "../chain/errors";
@@ -14,38 +16,41 @@ import { forgetPending, pendingFor, rememberPending } from "../api/pending";
 
 export const loanRouter = Router();
 
-const positive = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value) && value > 0;
+const originateLoanSchema = z.object({
+  beneficiary_id: z.string().min(1),
+  local_currency: z.string().trim().min(1).transform((v) => v.toUpperCase()),
+  principal_local: z.number().finite().positive(),
+  installment_count: z.number().int().min(1),
+  installment_interval_days: z.number().finite().positive().optional(),
+  purpose: z.string().trim().min(1).optional(),
+});
 
-/** Parse and check a loan request. Returns the DTO, or the reason it is refused. */
+/** Check a validated loan request against the guarantor's own beneficiary list. */
 function loanRequest(req: Request): { dto: OriginateLoanDTO } | { status: number; error: string } {
   const guarantorId = (req as any).guarantorId as string;
-  const body = req.body ?? {};
-  const beneficiaryId = typeof body.beneficiary_id === "string" ? body.beneficiary_id : "";
-  const localCurrency = typeof body.local_currency === "string" ? body.local_currency.toUpperCase() : "";
-  const { principal_local: principalLocal, installment_count: installmentCount } = body;
-  const installmentIntervalDays = positive(body.installment_interval_days) ? body.installment_interval_days : undefined;
-  const purpose = typeof body.purpose === "string" && body.purpose.trim() ? body.purpose.trim() : undefined;
+  const body = req.body as z.infer<typeof originateLoanSchema>;
 
-  if (!beneficiaryId || !localCurrency || !positive(principalLocal) || !Number.isInteger(installmentCount) || installmentCount < 1) {
-    return {
-      status: 400,
-      error:
-        "beneficiary_id, local_currency, a positive principal_local and a whole installment_count of at least 1 are required",
-    };
-  }
   // Only for a beneficiary on the guarantor's own list.
-  if (!linkOf(guarantorId, beneficiaryId)) {
+  if (!linkOf(guarantorId, body.beneficiary_id)) {
     return { status: 404, error: "Beneficiary not found" };
   }
-  return { dto: { beneficiaryId, principalLocal, localCurrency, installmentCount, installmentIntervalDays, purpose } };
+  return {
+    dto: {
+      beneficiaryId: body.beneficiary_id,
+      principalLocal: body.principal_local,
+      localCurrency: body.local_currency,
+      installmentCount: body.installment_count,
+      installmentIntervalDays: body.installment_interval_days,
+      purpose: body.purpose,
+    },
+  };
 }
 
 /**
  * POST /loans — Originate a loan, without the contracts connected. With them,
  * the guarantor's wallet signs: use /loans/prepare, then /loans/submit.
  */
-loanRouter.post("/", walletAuth, async (req: Request, res: Response) => {
+loanRouter.post("/", walletAuth, validateBody(originateLoanSchema), async (req: Request, res: Response) => {
   if (activeChain()) {
     return res.status(409).json({
       error: "This backend is connected to the contracts, so a loan is signed by your wallet: use /loans/prepare, then /loans/submit",
@@ -74,7 +79,7 @@ loanRouter.post("/", walletAuth, async (req: Request, res: Response) => {
  * published on chain, so that is brought up to date first: the collateral
  * the chain locks is then the collateral this backend quoted.
  */
-loanRouter.post("/prepare", walletAuth, async (req: Request, res: Response) => {
+loanRouter.post("/prepare", walletAuth, validateBody(originateLoanSchema), async (req: Request, res: Response) => {
   const chain = activeChain();
   if (!chain) {
     return res.status(409).json({ error: "This backend is not connected to the contracts: use POST /loans" });

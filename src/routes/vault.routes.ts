@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import { z } from "zod";
 import { walletAuth } from "../middleware/auth.middleware";
 import * as vaultService from "../services/vault.service";
 import { serializeVault } from "../api/serializers";
@@ -9,11 +10,12 @@ import { guarantors } from "../stores";
 import { logAuditEvent } from "../services/audit.service";
 import { PendingSignature } from "../types";
 import { forgetPending, pendingFor, rememberPending } from "../api/pending";
+import { validateBody } from "../api/validate";
 
 export const vaultRouter = Router();
 
-const positiveAmount = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value) && value > 0;
+const amountSchema = z.object({ amount_usd: z.number().finite().positive() });
+const depositSchema = amountSchema.extend({ tx_hash: z.string().optional() });
 
 type Kind = PendingSignature["kind"];
 
@@ -30,18 +32,14 @@ function refuseDirectWhenChained(kind: Kind, res: Response): boolean {
  * POST /vaults/deposit  { amount_usd, tx_hash? } — Record a USDC deposit.
  * Without the contracts connected only; with them, use prepare and submit.
  */
-vaultRouter.post("/deposit", walletAuth, async (req: Request, res: Response) => {
+vaultRouter.post("/deposit", walletAuth, validateBody(depositSchema), async (req: Request, res: Response) => {
   if (refuseDirectWhenChained("deposit", res)) return;
   const guarantorId = (req as any).guarantorId as string;
   if (!guarantorId) {
     return res.status(404).json({ error: "Guarantor not found. Register first." });
   }
 
-  const amountUsd = req.body?.amount_usd;
-  const txHash = typeof req.body?.tx_hash === "string" ? req.body.tx_hash : undefined;
-  if (!positiveAmount(amountUsd)) {
-    return res.status(400).json({ error: "amount_usd must be a positive number" });
-  }
+  const { amount_usd: amountUsd, tx_hash: txHash } = req.body;
 
   try {
     const vault = await vaultService.deposit(guarantorId, amountUsd, txHash);
@@ -58,17 +56,14 @@ vaultRouter.post("/deposit", walletAuth, async (req: Request, res: Response) => 
  * guarantor's own account, and letting a request name another destination
  * would let a stolen session send collateral elsewhere.
  */
-vaultRouter.post("/withdraw", walletAuth, async (req: Request, res: Response) => {
+vaultRouter.post("/withdraw", walletAuth, validateBody(amountSchema), async (req: Request, res: Response) => {
   if (refuseDirectWhenChained("withdraw", res)) return;
   const guarantorId = (req as any).guarantorId as string;
   if (!guarantorId) {
     return res.status(404).json({ error: "Guarantor not found. Register first." });
   }
 
-  const amountUsd = req.body?.amount_usd;
-  if (!positiveAmount(amountUsd)) {
-    return res.status(400).json({ error: "amount_usd must be a positive number" });
-  }
+  const { amount_usd: amountUsd } = req.body;
 
   try {
     const walletAddress = (req as any).walletAddress as string;
@@ -99,10 +94,7 @@ function prepareRoute(kind: Kind) {
       return res.status(404).json({ error: "Guarantor not found. Register first." });
     }
 
-    const amountUsd = req.body?.amount_usd;
-    if (!positiveAmount(amountUsd)) {
-      return res.status(400).json({ error: "amount_usd must be a positive number" });
-    }
+    const { amount_usd: amountUsd } = req.body;
 
     try {
       const prepared =
@@ -166,9 +158,9 @@ function submitRoute(kind: Kind) {
   };
 }
 
-vaultRouter.post("/deposit/prepare", walletAuth, prepareRoute("deposit"));
+vaultRouter.post("/deposit/prepare", walletAuth, validateBody(amountSchema), prepareRoute("deposit"));
 vaultRouter.post("/deposit/submit", walletAuth, submitRoute("deposit"));
-vaultRouter.post("/withdraw/prepare", walletAuth, prepareRoute("withdraw"));
+vaultRouter.post("/withdraw/prepare", walletAuth, validateBody(amountSchema), prepareRoute("withdraw"));
 vaultRouter.post("/withdraw/submit", walletAuth, submitRoute("withdraw"));
 
 /**
