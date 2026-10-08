@@ -80,7 +80,7 @@ test("a chain-path disbursement that never responds is audited as unknown, not f
   const { events } = queryAuditEvents({ eventType: "LOAN" });
   const forThisGuarantor = events.filter((e) => e.actor === guarantorId);
   assert.equal(forThisGuarantor.length, 2, "LOAN_ORIGINATED, then the disbursement outcome");
-  assert.equal(forThisGuarantor[0].action, "LOAN_DISBURSEMENT_UNKNOWN");
+  assert.ok(forThisGuarantor.some((e) => e.action === "LOAN_DISBURSEMENT_UNKNOWN"));
 });
 
 test("a chain-path disbursement that fails cleanly is audited as failed, not unknown", async () => {
@@ -92,5 +92,6 @@ test("a chain-path disbursement that fails cleanly is audited as failed, not unk
 
   const { events } = queryAuditEvents({ eventType: "LOAN" });
   const forThisGuarantor = events.filter((e) => e.actor === guarantorId);
-  assert.equal(forThisGuarantor[0].action, "LOAN_DISBURSEMENT_FAILED");
+  assert.ok(forThisGuarantor.some((e) => e.action === "LOAN_DISBURSEMENT_FAILED"));
+  assert.ok(!forThisGuarantor.some((e) => e.action === "LOAN_DISBURSEMENT_UNKNOWN"));
 });
