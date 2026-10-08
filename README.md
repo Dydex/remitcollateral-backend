@@ -341,6 +341,11 @@ records; it does not yet drive the LiquidationEngine's cranks (see
 > than one instance would run it more than once per tick, so a multi-instance
 > deployment needs an external scheduler or a lock.
 
+On `SIGINT`/`SIGTERM`, the process stops accepting new connections and waits
+for in-flight requests and any sweep tick already in progress to finish,
+rather than exiting mid-sweep — up to `SHUTDOWN_TIMEOUT_MS` (default 10s),
+after which it forces exit anyway rather than hanging.
+
 ---
 
 ## Trust Boundaries
