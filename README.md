@@ -286,6 +286,8 @@ A beneficiary is one person, however many guarantors support them. Adding a phon
 
 `POST /repayments/attest` is rate limited by the presented `x-api-key` (`REPAYMENT_ATTEST_RATE_LIMIT_MAX` per `REPAYMENT_ATTEST_RATE_LIMIT_WINDOW_MINUTES`, default 60 per minute), falling back to IP for requests with no key at all.
 
+It is also idempotent per `(loanId, installmentNumber)`: a partner retrying an attestation it never saw a response for — rather than a genuinely new installment — gets the same loan back with `collateralReleased: 0`, without a second attestation record or a second contract-gateway call.
+
 ### Remittance History
 
 | Method | Endpoint | Auth | Description |

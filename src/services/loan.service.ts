@@ -383,6 +383,19 @@ export async function processRepaymentAttestation(
   const loan = loans.get(attestation.loan_id);
   if (!loan) throw new Error(`Loan ${attestation.loan_id} not found`);
 
+  // Idempotent per (loan, installment): a partner retrying after a timeout
+  // it never saw a response for must not re-release collateral, duplicate
+  // the audit trail, or call the contract gateway a second time. This also
+  // means a retry of a loan's *last* installment, submitted after the loan
+  // has already moved to "repaid", is recognized as a replay rather than
+  // hitting the status guard below with a confusing error.
+  const alreadyAttested = repaymentAttestations.some(
+    (a) => a.loanId === attestation.loan_id && a.installmentNumber === attestation.installment_number,
+  );
+  if (alreadyAttested) {
+    return { loan, collateralReleased: 0 };
+  }
+
   if (loan.status !== "active" && loan.status !== "grace") {
     throw new Error(`Cannot process repayment for loan with status: ${loan.status}`);
   }
