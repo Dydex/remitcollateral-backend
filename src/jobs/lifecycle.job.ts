@@ -1,5 +1,6 @@
 import { config } from "../config";
 import { logger } from "../logging/logger";
+import { sweepRunsTotal } from "../metrics";
 import { sweepLoanLifecycle } from "../services/liquidation.service";
 
 const log = logger.child({ component: "lifecycle" });
@@ -33,6 +34,7 @@ async function tick(): Promise<void> {
   running = true;
   try {
     const result = await sweepLoanLifecycle();
+    sweepRunsTotal.inc({ outcome: "success" });
 
     if (result.enteredGrace.length > 0 || result.defaulted.length > 0) {
       log.info(
@@ -46,6 +48,7 @@ async function tick(): Promise<void> {
       );
     }
   } catch (err) {
+    sweepRunsTotal.inc({ outcome: "failure" });
     log.error({ err }, "sweep failed");
   } finally {
     running = false;

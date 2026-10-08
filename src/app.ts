@@ -7,9 +7,11 @@ import * as liquidationService from "./services/liquidation.service";
 import * as remittanceService from "./services/remittance.service";
 import { MockOffRampAdapter } from "./adapters/mock-offramp.adapter";
 import { MockContractGateway } from "./contracts/mock-gateway";
+import { instrumented } from "./contracts/instrumented-gateway";
 
 // Route modules
 import { healthRouter } from "./routes/health.routes";
+import { metricsRouter } from "./routes/metrics.routes";
 import { authRouter } from "./routes/auth.routes";
 import { guarantorRouter } from "./routes/guarantor.routes";
 import { vaultRouter } from "./routes/vault.routes";
@@ -40,7 +42,7 @@ const app = express();
 // mocks for both; swapping in live implementations here is the only change
 // needed once the partner integration and remitcollateral-contracts land.
 const offRampAdapter = new MockOffRampAdapter();
-const contractGateway = new MockContractGateway();
+const contractGateway = instrumented(new MockContractGateway());
 
 loanService.setOffRampAdapter(offRampAdapter);
 remittanceService.setOffRampAdapter(offRampAdapter);
@@ -114,6 +116,7 @@ app.use(requestLogging);
  */
 export const routeMounts: Array<{ prefix: string; router: express.Router }> = [
   { prefix: "/health", router: healthRouter }, // no /api/v1 prefix
+  { prefix: "/metrics", router: metricsRouter }, // no /api/v1 prefix
   { prefix: "/api/v1/auth", router: authRouter },
   { prefix: "/api/v1/guarantors", router: guarantorRouter },
   { prefix: "/api/v1/vaults", router: vaultRouter },
