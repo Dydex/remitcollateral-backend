@@ -57,30 +57,52 @@ test("a missing signature is reported as such", () => {
   assert.match(err.message, /signature/);
 });
 
+/**
+ * A fixed, explicit timebound rather than .setTimeout(300) -- which stamps
+ * maxTime from the wall clock at build time. Two calls meant to produce the
+ * identical transaction could then land on either side of a second
+ * boundary and hash differently, intermittently tripping the wrong branch
+ * of assertSameTransaction below.
+ */
 function buildTx(source: Keypair, memoValue: string) {
   return new TransactionBuilder(new Account(source.publicKey(), "1"), {
     fee: "100",
     networkPassphrase: Networks.TESTNET,
+    timebounds: { minTime: 0, maxTime: 4_000_000_000 },
   })
     .addOperation(Operation.manageData({ name: "k", value: memoValue }))
-    .setTimeout(300)
     .build();
 }
 
-test("only the exact transaction that was prepared is accepted once signed", () => {
+test("the exact transaction that was prepared is accepted once signed", () => {
   const wallet = Keypair.random();
-  const prepared = buildTx(wallet, "v1");
-  const expectedHash = Buffer.from(prepared.hash()).toString("hex");
+  const expectedHash = Buffer.from(buildTx(wallet, "v1").hash()).toString("hex");
 
   const signed = buildTx(wallet, "v1");
   signed.sign(wallet);
   assert.equal(assertSameTransaction(expectedHash, signed.toXDR(), Networks.TESTNET).signatures.length, 1);
+});
+
+test("a different transaction, even if signed, is refused", () => {
+  const wallet = Keypair.random();
+  const expectedHash = Buffer.from(buildTx(wallet, "v1").hash()).toString("hex");
 
   const other = buildTx(wallet, "v2");
   other.sign(wallet);
   assert.throws(() => assertSameTransaction(expectedHash, other.toXDR(), Networks.TESTNET), /not the one that was prepared/);
+});
+
+test("the right transaction, unsigned, is refused", () => {
+  const wallet = Keypair.random();
+  const expectedHash = Buffer.from(buildTx(wallet, "v1").hash()).toString("hex");
 
   const unsigned = buildTx(wallet, "v1");
   assert.throws(() => assertSameTransaction(expectedHash, unsigned.toXDR(), Networks.TESTNET), /not been signed/);
+});
+
+test("a malformed envelope is refused", () => {
+  const wallet = Keypair.random();
+  const expectedHash = Buffer.from(buildTx(wallet, "v1").hash()).toString("hex");
+
   assert.throws(() => assertSameTransaction(expectedHash, "garbage", Networks.TESTNET), /not a valid/);
 });

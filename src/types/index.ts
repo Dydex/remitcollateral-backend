@@ -77,6 +77,7 @@ export interface RemittanceRecord {
 }
 
 export type LoanStatus = "active" | "grace" | "repaid" | "defaulted";
+export type DisbursementStatus = "completed" | "unknown" | "failed";
 
 export interface InstallmentScheduleItem {
   installmentNumber: number;
@@ -104,6 +105,7 @@ export interface Loan {
   installmentIntervalDays: number;
   schedule: InstallmentScheduleItem[];
   status: LoanStatus;
+  disbursementStatus?: DisbursementStatus;
   graceExpiresAt?: string;
   purpose?: string;
   /** The loan's ID on the LoanLedger contract, once originated on chain. */

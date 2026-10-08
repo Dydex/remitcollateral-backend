@@ -7,9 +7,11 @@ import * as liquidationService from "./services/liquidation.service";
 import * as remittanceService from "./services/remittance.service";
 import { MockOffRampAdapter } from "./adapters/mock-offramp.adapter";
 import { MockContractGateway } from "./contracts/mock-gateway";
+import { instrumented } from "./contracts/instrumented-gateway";
 
 // Route modules
 import { healthRouter } from "./routes/health.routes";
+import { metricsRouter } from "./routes/metrics.routes";
 import { authRouter } from "./routes/auth.routes";
 import { guarantorRouter } from "./routes/guarantor.routes";
 import { vaultRouter } from "./routes/vault.routes";
@@ -21,6 +23,7 @@ import { auditRouter } from "./routes/audit.routes";
 import { adminRouter } from "./routes/admin.routes";
 import { fxRouter } from "./routes/fx.routes";
 import { chainRouter } from "./routes/chain.routes";
+import { openApiRouter } from "./routes/openapi.routes";
 import { config } from "./config";
 import { chainFromConfig } from "./chain";
 import { setChain } from "./chain/runtime";
@@ -39,7 +42,7 @@ const app = express();
 // mocks for both; swapping in live implementations here is the only change
 // needed once the partner integration and remitcollateral-contracts land.
 const offRampAdapter = new MockOffRampAdapter();
-const contractGateway = new MockContractGateway();
+const contractGateway = instrumented(new MockContractGateway());
 
 loanService.setOffRampAdapter(offRampAdapter);
 remittanceService.setOffRampAdapter(offRampAdapter);
@@ -105,24 +108,34 @@ app.use(requestLogging);
 
 // ─── Routes ──────────────────────────────────────────────────────────
 
-// Health (no prefix)
-app.use("/health", healthRouter);
+/**
+ * The single source of truth for what's mounted where. Exported so the
+ * OpenAPI spec's test can enumerate the real routes and fail if the spec
+ * drifts from them, rather than mounting routes ad hoc below where nothing
+ * outside this file could ever check that list against reality.
+ */
+export const routeMounts: Array<{ prefix: string; router: express.Router }> = [
+  { prefix: "/health", router: healthRouter }, // no /api/v1 prefix
+  { prefix: "/metrics", router: metricsRouter }, // no /api/v1 prefix
+  { prefix: "/api/v1/auth", router: authRouter },
+  { prefix: "/api/v1/guarantors", router: guarantorRouter },
+  { prefix: "/api/v1/vaults", router: vaultRouter },
+  { prefix: "/api/v1/beneficiaries", router: beneficiaryRouter },
+  { prefix: "/api/v1/loans", router: loanRouter },
+  { prefix: "/api/v1/repayments", router: repaymentRouter },
+  { prefix: "/api/v1/remittances", router: remittanceRouter },
+  { prefix: "/api/v1/audit", router: auditRouter },
+  { prefix: "/api/v1/admin", router: adminRouter },
+  { prefix: "/api/v1/fx", router: fxRouter },
+  { prefix: "/api/v1/chain", router: chainRouter },
+  { prefix: "/api/v1", router: openApiRouter },
+  // Repayment history is also accessible under /api/v1/loans/:id/repayments.
+  { prefix: "/api/v1", router: repaymentRouter },
+];
 
-// All API routes under /api/v1
-app.use("/api/v1/auth", authRouter);
-app.use("/api/v1/guarantors", guarantorRouter);
-app.use("/api/v1/vaults", vaultRouter);
-app.use("/api/v1/beneficiaries", beneficiaryRouter);
-app.use("/api/v1/loans", loanRouter);
-app.use("/api/v1/repayments", repaymentRouter);
-app.use("/api/v1/remittances", remittanceRouter);
-app.use("/api/v1/audit", auditRouter);
-app.use("/api/v1/admin", adminRouter);
-app.use("/api/v1/fx", fxRouter);
-app.use("/api/v1/chain", chainRouter);
-
-// Repayment history is also accessible under /api/v1/loans/:id/repayments
-app.use("/api/v1", repaymentRouter);
+for (const { prefix, router } of routeMounts) {
+  app.use(prefix, router);
+}
 
 // ─── Error Handling ──────────────────────────────────────────────────
 
