@@ -30,6 +30,33 @@ The backend API serves as the orchestration layer between the frontend, Soroban 
 
 ---
 
+## Live deployment (Stellar testnet)
+
+**<https://remitcollateral-backend-production.up.railway.app>**, deployed on Railway.
+There is no page at `/`: this is an API, so a bare visit returns a 404.
+
+| Check | URL |
+|-------|-----|
+| Service health | <https://remitcollateral-backend-production.up.railway.app/health> |
+| Connected to the contracts? | <https://remitcollateral-backend-production.up.railway.app/api/v1/chain> — `{ "enabled": true, ... }` |
+
+It is configured with the testnet contracts documented in
+[remitcollateral-contract](https://github.com/RemitCollateral/remitcollateral-contract#testnet),
+`GRACE_PERIOD_DAYS=14` to match the ledger, and `CORS_ALLOWED_ORIGINS` set to the
+deployed frontend, <https://remitcollateral-frontend.vercel.app>, which is the only
+browser origin it accepts.
+
+What is **not** real in this deployment, so nobody mistakes it for production:
+
+- The off-ramp partner is `MockOffRampAdapter`: disbursements are simulated, no
+  money moves, and exchange rates are fixed. `verifyAttestation` accepts any
+  non-empty signature.
+- Repayments and liquidation update only the backend's own records; they are not
+  yet settled on chain (see [On-chain roles](#on-chain-roles)).
+- State is in memory and is lost whenever the service restarts.
+
+---
+
 ## Getting Started
 
 ### Prerequisites
