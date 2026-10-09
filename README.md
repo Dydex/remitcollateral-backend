@@ -50,7 +50,9 @@ What is **not** real in this deployment, so nobody mistakes it for production:
 
 - The off-ramp partner is `MockOffRampAdapter`: disbursements are simulated, no
   money moves, and exchange rates are fixed. `verifyAttestation` accepts any
-  non-empty signature.
+  non-empty signature. It does **not** invent remittance history: a new
+  beneficiary starts at zero reputation and the full base LTV
+  (`MOCK_PARTNER_SEED_HISTORY` is off), checked against the live service.
 - Repayments and liquidation update only the backend's own records; they are not
   yet settled on chain (see [On-chain roles](#on-chain-roles)).
 - State is in memory and is lost whenever the service restarts.
