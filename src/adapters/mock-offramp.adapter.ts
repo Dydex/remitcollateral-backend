@@ -7,6 +7,7 @@ import {
   OffRampRemittanceRecord,
 } from "../types";
 import { logger } from "../logging/logger";
+import { config } from "../config";
 
 const log = logger.child({ component: "mock-offramp" });
 
@@ -96,7 +97,15 @@ export class MockOffRampAdapter implements OffRampAdapter {
     _beneficiaryPhone: string,
     _since: string,
   ): Promise<OffRampRemittanceRecord[]> {
-    // Return configurable seed data for testing reputation scoring
+    // Off unless explicitly asked for. These records are stored as
+    // partner_reported and carry full scoring weight, so inventing them
+    // means quoting a real guarantor less collateral than the protocol
+    // should require, on the strength of transfers that never happened.
+    // A beneficiary with no history scores zero and posts the full base
+    // LTV, which is the correct answer for someone with no history.
+    if (!config.mockPartnerSeedHistory) return [];
+
+    // Seed data for local demos and reputation-scoring experiments only.
     return [
       {
         amount_usd: 200,

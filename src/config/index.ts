@@ -28,6 +28,17 @@ export const config = {
   stellarRpcUrl: process.env.STELLAR_RPC_URL || "https://soroban-testnet.stellar.org",
 
   /**
+   * Whether MockOffRampAdapter invents a remittance history for a newly
+   * registered beneficiary. Off by default, deliberately: seeded records
+   * are stored as `partner_reported`, which carry full scoring weight
+   * (§8.1) and therefore lower the collateral the protocol demands. An
+   * adapter that fabricates that by default means a deployment quotes
+   * real guarantors less collateral on the strength of transfers that
+   * never happened. Turn it on only for local demos.
+   */
+  mockPartnerSeedHistory: process.env.MOCK_PARTNER_SEED_HISTORY === "true",
+
+  /**
    * Origins allowed to make browser requests to this API. Empty means
    * "allow any origin," which is only acceptable outside production: set
    * this before deploying anywhere real traffic reaches the API.

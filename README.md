@@ -119,6 +119,8 @@ With the contracts connected, the LoanLedger's own settings decide what happens 
 
 A loan's principal is set in the beneficiary's local currency and priced in USD at the off-ramp partner's rate when it is originated, since that is the rate the partner pays out at. The rate is recorded on the loan, so its installments and collateral releases are measured against it for the loan's whole life. A currency the partner cannot pay out in is refused. The mock partner quotes fixed indicative rates for NGN, GHS, XOF, KES and USD.
 
+`MockOffRampAdapter` can also invent a remittance history for a newly registered beneficiary, but this is **off by default** (`MOCK_PARTNER_SEED_HISTORY`). Seeded records are stored as `partner_reported`, which carry full scoring weight, so fabricating them means quoting a real guarantor less collateral than the protocol should require on the strength of transfers that never happened. With it off, a beneficiary with no history scores zero and their guarantor posts the full base LTV — which is the correct answer for someone with no history. Turn it on only for local demos.
+
 ### On-chain roles
 
 The backend acts on chain in exactly three roles, and holds no contract admin key: the contracts' admin is a multisig council.
